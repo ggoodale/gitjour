@@ -11,12 +11,7 @@ module Gitjour
       def run(operation = nil, *arguments)
         case operation
           when "list"
-            service_list.each do |service|
-              puts "=== #{service.name} on #{service.host} ==="
-              puts "  gitjour clone #{service.name}"
-              puts "  #{service.description}" if service.description && service.description != '' && service.description !~ /^Unnamed repository/
-              puts
-            end
+            list
           when "clone"
             clone(*arguments)
           when "serve"
@@ -29,9 +24,19 @@ module Gitjour
       end
 
       private
+			def list
+				service_list.each do |service|
+          puts "=== #{service.name} on #{service.host} ==="
+          puts "  gitjour clone #{service.name}"
+          puts "  #{service.description}" if service.description && service.description != '' && service.description !~ /^Unnamed repository/
+          puts
+        end
+			end
+
       def get_host_and_share(repository_name)
         name_of_share = repository_name || fail("You have to pass in a name")
         host = service_list(name_of_share).detect{|service| service.name == name_of_share}.host rescue exit_with!("Couldn't find #{name_of_share}")
+        system("git clone git://#{host}/ #{name_of_share}/")  
         [host, name_of_share]
       end
 
