@@ -52,10 +52,10 @@ module Gitjour
         system("git remote add #{name_of_share} git://#{host}/")
       end
 
-      def serve(path, port)
+      def serve(name, path, port)
         path ||= Dir.pwd
         path = File.expand_path(path)
-        File.exists?("#{path}/.git") ? announce_repo(path, port) : Dir["#{path}/*"].each_with_index{|dir,i| announce_repo(dir, port+i) if File.directory?(dir)}
+        File.exists?("#{path}/.git") ? announce_repo(name, path, port) : Dir["#{path}/*"].each_with_index{|dir,i| announce_repo(name, dir, port+i) if File.directory?(dir)}
         cl("git-daemon --verbose --export-all --port=#{port} --base-path=#{path} --base-path-relaxed")
       end
 
@@ -84,7 +84,7 @@ module Gitjour
         service_list
       end
 
-      def announce_repo(name, path, port)
+      def announce_repo(share_name, path, port)
         return unless File.exists?("#{path}/.git")
         name = share_name || File.basename(path)
         tr = DNSSD::TextRecord.new
