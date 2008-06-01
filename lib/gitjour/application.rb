@@ -14,7 +14,7 @@ module Gitjour
       def run(*args)
         case args.shift
           when "list"
-            list
+            list(*args)
           when "clone"
             clone(*args)
           when "serve"
@@ -27,8 +27,9 @@ module Gitjour
       end
 
       private
-			def list
-				service_list.each do |service|
+			def list(timeout, *rest)
+        return help if timeout.to_i.zero?
+				service_list(timeout.to_i).each do |service|
           puts "=== #{service.name} on #{service.host}:#{service.port} ==="
           puts "  gitjour clone #{service.name}"
           if service.description != '' && service.description !~ /^Unnamed repository/
@@ -82,7 +83,7 @@ module Gitjour
         puts "Serve up and use git repositories via Bonjour/DNSSD."
         puts "\nUsage: gitjour <command> [args]"
         puts
-        puts "  list"
+        puts "  list [<timeout>]"
         puts "      Lists available repositories."
         puts
         puts "  clone <project> [<directory>]"
@@ -140,9 +141,9 @@ module Gitjour
         return found
       end
 
-      def service_list
+      def service_list(timeout)
         list = Set.new
-        discover { |obj| list << obj }
+        discover(timeout) { |obj| list << obj }
 
         return list
       end
