@@ -4,20 +4,22 @@ require 'set'
 Thread.abort_on_exception = true
 
 module Gitjour
-  GitService = Struct.new(:name, :host, :description)
+  GitService = Struct.new(:name, :host, :port, :description)  
+
   class Application
 
     class << self
-      def run(operation = nil, *arguments)
-        case operation
+      def run(options)
+        @@verbose = options.verbose
+        case options.command
           when "list"
             list
           when "clone"
-            clone(*arguments)
+            clone(options.name)
           when "serve"
-            serve(*arguments)
+            serve(options.name, options.path, options.port)
           when "remote"
-            remote(*arguments)
+            remote(options.name)
           else
             help
         end
@@ -40,9 +42,9 @@ module Gitjour
         [host, name_of_share]
       end
 
-      def clone(repository_name,*rest)
-        host, name_of_share = get_host_and_share(repository_name)
-        system("git clone git://#{host}/ #{name_of_share}/")
+      def clone(name)
+        service = service_list(name).detect{|service| service.name == name} rescue exit_with!("Couldn't find #{name}")
+        cl("git clone git://#{service.host}:#{service.port}/ #{name}/")
       end
 
       def remote(repository_name,*rest)
@@ -50,23 +52,11 @@ module Gitjour
         system("git remote add #{name_of_share} git://#{host}/")
       end
 
-      def serve(path, share_name = nil, *rest)
+      def serve(name, path, port)
         path ||= Dir.pwd
         path = File.expand_path(path)
-        File.exists?("#{path}/.git") ? announce_repo(path, share_name) : Dir["#{path}/*"].each{|dir| announce_repo(dir) if File.directory?(dir)}
-        `git-daemon --verbose --export-all --base-path=#{path} --base-path-relaxed`
-      end
-
-      def help
-        puts "Serve up and use git repositories via Bonjour/DNSSD."
-        puts "Usage: gitjour <command> [args]"
-        puts
-        puts "  list      Lists available repositories."
-        puts "  clone     Clone a gitjour served repository."
-        puts "  serve     Serve up the current directory via gitjour."
-        puts "  remote    Add a Bonjour remote into your current repository."
-        puts "            Optionally pass name to not use pwd."
-        puts
+        File.exists?("#{path}/.git") ? announce_repo(name, path, port) : Dir["#{path}/*"].each_with_index{|dir,i| announce_repo(name, dir, port+i) if File.directory?(dir)}
+        cl("git-daemon --verbose --export-all --port=#{port} --base-path=#{path} --base-path-relaxed")
       end
 
       def exit_with!(message)
@@ -82,7 +72,7 @@ module Gitjour
 
         service = DNSSD.browse "_git._tcp" do |reply|
           DNSSD.resolve reply.name, reply.type, reply.domain do |resolve_reply|
-            service_list << GitService.new(reply.name, resolve_reply.target, resolve_reply.text_record['description'])
+            service_list << GitService.new(reply.name, resolve_reply.target, resolve_reply.port, resolve_reply.text_record['description'])
             if looking_for && reply.name == looking_for
               waiting_thread.kill
             end
@@ -94,13 +84,21 @@ module Gitjour
         service_list
       end
 
-      def announce_repo(path, share_name = nil)
+      def announce_repo(share_name, path, port)
         return unless File.exists?("#{path}/.git")
         name = share_name || File.basename(path)
         tr = DNSSD::TextRecord.new
         tr['description'] = File.read(".git/description") rescue "a git project"
-        DNSSD.register(name, "_git._tcp", 'local', 9148, tr.encode) do |register_reply|
+        DNSSD.register(name, "_git._tcp", 'local', port, tr.encode) do |register_reply| 
           puts "Registered #{name}.  Starting service."
+        end
+      end
+      
+      def cl(command)
+        output = `#{command}`
+        if @@verbose
+          puts command
+          puts output
         end
       end
     end
